@@ -37,7 +37,7 @@ def main(args):
     # ):
 
     for name, scene in zip(
-        ('sofa3',),
+        ('sofa',),
         ('scene0207_00',)
     ):
         # Image 불러오고 numpy로 전환

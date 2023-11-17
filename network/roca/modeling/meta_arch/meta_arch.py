@@ -8,6 +8,8 @@ from detectron2.utils.events import get_event_storage
 
 from roca.data.constants import VOXEL_RES
 from roca.utils.misc import make_dense_volume
+import numpy as np
+from PIL import Image
 
 
 # Based on detectron2.GeneralizedRCNN
@@ -109,12 +111,26 @@ class ROCA(GeneralizedRCNN):
         assert not self.training
 
         images = self.preprocess_image(batched_inputs)
+        print(">>> PREPROCESS IMAGE")
+        preprocessed_pil_image = Image.fromarray(np.transpose(np.asarray(images[0].cpu()), (1, 2, 0)).astype('uint8'))
+        preprocessed_pil_image.save("./preprocessed_image.jpg")
+
+        print(">>> FEATURES")
         features = self.backbone(images.tensor)
+        # P2 (1/4 scale, stride 4), P3 (1/8, stride 8), P4 (1/16, stride 16), P5 (1/32, stride 32), P6 (1/64, stride 64)
+        # print(features['p2'].size()) # torch.Size([1, 256, 96, 120])
+        # print(features['p3'].size()) # torch.Size([1, 256, 48, 60])
+        # print(features['p4'].size()) # torch.Size([1, 256, 24, 30])
+        # print(features['p5'].size()) # torch.Size([1, 256, 12, 15])
+        # print(features['p6'].size()) # torch.Size([1, 256, 6, 8])
 
         if detected_instances is None:
+            print(">>> IF DETECTED INSTANCES IS NONE")
             if self.proposal_generator:
+                print(">>> first")
                 proposals, _ = self.proposal_generator(images, features, None)
             else:
+                print(">>> second")
                 assert 'proposals' in batched_inputs[0]
                 proposals = [
                     x['proposals'].to(self.device) for x in batched_inputs
@@ -132,6 +148,7 @@ class ROCA(GeneralizedRCNN):
                 scenes=scenes
             )
         else:
+            print(">>> IF DETECTED INSTANCES IS NOT NONE")
             detected_instances = [
                 x.to(self.device) for x in detected_instances
             ]
@@ -140,6 +157,7 @@ class ROCA(GeneralizedRCNN):
             )
 
         if do_postprocess:
+            print(">>> POSTPROCESS")
             results = self.__class__._postprocess(
                 results, batched_inputs, images.image_sizes
             )
@@ -156,6 +174,17 @@ class ROCA(GeneralizedRCNN):
                 # indices are global, so all instances should have all CAD ids
                 for result in results:
                     result[cad_ids] = extra_outputs[cad_ids]
+        
+        print(">>> RESULTS")
+        pred_masks = results[0]['instances'].pred_masks
+        pred_masks_np = pred_masks.cpu().numpy()
+
+        # index for visualization
+        mask_to_visualize = pred_masks_np[1]
+
+        mask_to_visualize = (mask_to_visualize * 255).astype(np.uint8)
+        pil_image = Image.fromarray(mask_to_visualize)
+        pil_image.save("./mask_image2.jpg")
 
         return results
 

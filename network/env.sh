@@ -1,5 +1,5 @@
 # System config
-export HOME=/root/MultiDreamer/ROCA
+export HOME=/root/MultiDreamer/ROCA2
 export OMP_NUM_THREADS=1
 export NUM_WORKERS=4
 export SEED=2021
