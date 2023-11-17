@@ -229,12 +229,12 @@ class AlignmentHead(nn.Module):
         losses.update(proc_losses)
 
         # Retrieval
-        losses.update(self._forward_retrieval_train(
-            instances,
-            mask_pred,
-            nocs,
-            shape_code
-        ))
+        # losses.update(self._forward_retrieval_train(
+        #     instances,
+        #     mask_pred,
+        #     nocs,
+        #     shape_code
+        # ))
 
         return losses
 
@@ -250,6 +250,7 @@ class AlignmentHead(nn.Module):
         scenes: List[str]
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
 
+        # roi_heads.py > _forward_alignment_inference()에서 호출되는 진입점
         instance_sizes = [len(x) for x in instances]
         num_instances = sum(instance_sizes)
         if num_instances == 0:
@@ -273,6 +274,7 @@ class AlignmentHead(nn.Module):
             image_size
         )
 
+        # Scale값 예측, pred_classes input으로 사용한다
         pred_scales = self._forward_scale(shape_code, pred_classes)
         predictions['pred_scales'] = pred_scales
 
@@ -330,6 +332,7 @@ class AlignmentHead(nn.Module):
         has_alignment = torch.ones(sum(instance_sizes), dtype=torch.bool)
         predictions['has_alignment'] = has_alignment
 
+        # CAD retrieval은 제일 마지막에 함
         predictions, extra_outputs = self._forward_retrieval_inference(
             predictions=predictions,
             extra_outputs={},

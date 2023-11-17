@@ -155,21 +155,21 @@ def setup_output_dir(args, cfg):
 def train_or_eval(args, cfg):
     trainer = Trainer(cfg)
     trainer.resume_or_load(resume=args.resume)
-    if args.eval_only:
+    if args.eval_only: # predict만 하는 경우
         trainer.test(cfg, trainer.model)
     elif args.resume:
         trainer.test(cfg, trainer.model)
-        trainer.train()
+        trainer.train() # train.py 진입 -> detectron2.DefaultTrainer.train()으로 
     else:
         trainer.train()
 
 
-def main(args):
+def main(args): # configuration후 train or eval
     train_name, val_name = register_data(args)
     cfg = make_config(train_name, val_name, args)
     setup_output_dir(args, cfg)
     train_or_eval(args, cfg)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__': # model 진입 점
     main(parse_args())

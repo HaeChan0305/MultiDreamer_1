@@ -101,7 +101,8 @@ class ROCAROIHeads(StandardROIHeads):
         if self.training:
             assert targets
             assert gt_depths is not None
-            proposals = self.label_and_sample_proposals(proposals, targets)
+            proposals = self.label_and_sample_proposals(proposals, targets) # List[Instances]
+                                                                            # Instance = {proposal_boxes, gt_boxes}
         else:
             inference_args = targets  # Extra arguments for inference
         del targets
@@ -123,12 +124,17 @@ class ROCAROIHeads(StandardROIHeads):
                 gt_depths=gt_depths
             ))
             return proposals, losses
-        else:
-            pred_instances = self._forward_box(features, proposals)
+        else: # Prediction 할 때 
 
+            # Proposals 여기에만 쓰임, detectron2에서 정의된 forward box
+            pred_instances = self._forward_box(features, proposals) 
+            print(" >>> BOX\n", pred_instances)
+
+            # modeling>depth_head의 모듈
             pred_depths, depth_features = self._forward_image_depth(features)
             extra_outputs = {'pred_image_depths': pred_depths}
 
+            # inference시에 _forward_alignment_inference()호출
             pred_instances, alignment_outputs = self._forward_alignment(
                 features,
                 pred_instances,
@@ -264,6 +270,7 @@ class ROCAROIHeads(StandardROIHeads):
         scenes: Optional[List[str]] = None
     ) -> Tuple[List[Instances], Dict[str, Any]]:
 
+        # instances는 self._forward_box() 호출 결과
         score_flt = [p.scores >= self.test_min_score for p in instances]
         instances = [p[flt] for p, flt in zip(instances, score_flt)]
 
@@ -277,7 +284,9 @@ class ROCAROIHeads(StandardROIHeads):
         pred_mask_probs, pred_masks = self._forward_mask(
             features, pred_classes
         )
-
+        
+        # Repaint 필요함
+        
         # Predict alignments
         predictions, extra_outputs = self.alignment_head(
             instances=instances,
@@ -306,7 +315,9 @@ class ROCAROIHeads(StandardROIHeads):
         class_weights=None
     ):
         mask_logits = self.mask_head.layers(features)
-        if self.per_category_mask:
+
+        # 이거 뭐하는 역할??
+        if self.per_category_mask: 
             mask_logits = select_classes(
                 mask_logits,
                 self.num_classes + 1,

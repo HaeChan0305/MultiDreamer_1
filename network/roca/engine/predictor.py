@@ -38,16 +38,20 @@ class Predictor:
             cfg.MODEL.WILD_RETRIEVAL_ON = True
         cfg.MODEL.INSTANCES_CONFIDENCE_THRESH = thresh
 
+        # Load model
         model = build_model(cfg)
         backup = torch.load(model_path)
         model.load_state_dict(backup['model'])
 
+        # train mode -> evaluation mode
         model.eval()
         model.requires_grad_(False)
 
+        # Scan2CADVal(https://paperswithcode.com/dataset/scan2cad) dataset을 dectectron2.DataCatalog() 형태로 저장
         data_name = 'Scan2CADVal'
         register_scan2cad(data_name, {}, '', data_dir, '', '', 'val')
 
+        # Dataset
         cad_manager = CADCatalog.get(data_name)
         points, ids = cad_manager.batched_points_and_ids(volumes=True)
         model.set_cad_models(points, ids, cad_manager.scene_alignments)
@@ -67,6 +71,7 @@ class Predictor:
         self.model = model
         self.cad_manager = cad_manager
 
+        # 
         with open('./assets/camera.obj') as f:
             cam = trimesh.load(f, file_type='obj', force='mesh')
         cam.apply_scale(0.25)

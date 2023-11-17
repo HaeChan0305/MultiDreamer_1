@@ -175,7 +175,7 @@ class Trainer(DefaultTrainer):
         return DatasetEvaluators([ap_eval, depth_eval, v2c_eval, v2c_eval_ret])
 
     @classmethod
-    def test(cls, cfg, model, evaluators=None):
+    def test(cls, cfg, model, evaluators=None): # trainer.test() 진입점
         with cls.cad_context(cfg, model):
             results = super().test(cfg, model, evaluators)
         CustomLogger.get(cfg).log_metrics(results, 'test')
