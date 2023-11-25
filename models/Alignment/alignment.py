@@ -5,7 +5,7 @@ from PIL import Image
 
 from geometry import depth_to_points
 
-
+DEBUG = True
 # class Alignment():
 #     def __init__(self, input_path, mask_path, depth_path, mesh1_path, mesh2_path):
 #         self.input = np.array(Image.open(input_path))
@@ -48,16 +48,62 @@ def apply_transformation(mesh, translation=None, scale=None, rotation=None):
 def merge_meshes(mesh1, mesh2):
     return mesh1 + mesh2
 
-def find_key_depth_points():
-    mask0 = np.array(Image.open("../../data/output/ref_washing/mask0.jpg"))
-    mask1 = np.array(Image.open("../../data/output/ref_washing/mask1.jpg"))
-    depth = np.array(Image.open("../../data/output/ref_washing/depth.png"))
+def get_depth_info(mask, depth):
+    '''
+    Find the positions and the depth values which are max and min in the given mask area.
     
-    print(depth)
-    print(mask0)
+    - mask  : np.array, (H, W) : 0 or 255
+    - depth : np.array, (H, W) : 0 ~ 255
+    
+    '''
+    max_mask = np.where(mask==255, depth, -1)
+    max_pos = np.unravel_index(np.argmax(max_mask), depth.shape)
+    max_depth = max_mask[max_pos[0], max_pos[1]]
+    
+    min_mask = np.where(mask==255, depth, 256)
+    min_pos = np.unravel_index(np.argmin(min_mask), depth.shape)
+    min_depth = min_mask[min_pos[0], min_pos[1]]
+    
+    if DEBUG:
+        print(">>> max_pos, max_depth, min_pos, min_depth", max_pos, max_depth, min_pos, min_depth)
+        
+        cnt_max_pos = np.sum(np.where(max_mask==max_depth, 1, 0))
+        print(">>> The number of points which have the maximum value of depth.", cnt_max_pos)
+        
+        cnt_min_pos = np.sum(np.where(min_mask==min_depth, 1, 0))
+        print(">>> The number of points which have the mininum value of depth.", cnt_min_pos)
+        
+        depth[max_pos[0], max_pos[1]] = 0
+        depth[min_pos[0], min_pos[1]] = 255
+
+        pred = Image.fromarray(depth)
+        pred.save("../../data/output/depth_minmax_debugging.png")
+        
+    return max_pos, max_depth, min_pos, min_depth
     
 
-def find_gap(vector, mesh):
+def get_depth_gap(mask1, mask2, depth):
+    '''
+    1번 함수
+    
+    Argument :
+        - mask1 : np.array, 0 or 255, object1 에 대한 mask
+        - mask2 : np.array, 0 or 255, object2 에 대한 mask, 
+        - depth : mp.array, 0 ~ 255,
+    
+    return :
+        - a, object1 내에서 가장 큰 depth 차이 값
+        - b, object2 내에서 가장 큰 depth 차이 값
+        - c, object1의 가장 밝은 부분(min depth)와 object2의 가장 밝은 부분 차이 값
+    '''
+    _, max_value1, _, min_value1 = get_depth_info(mask1, depth)
+    _, max_value2, _, min_value2 = get_depth_info(mask2, depth)
+    
+    return max_value1 - min_value1, max_value2 - min_value2, np.abs(min_value1 - min_value2)
+    
+    
+
+def get_mesh_distance_gap(vector, mesh):
     '''
     2번 함수
     
@@ -86,8 +132,12 @@ def find_gap(vector, mesh):
     return np.abs((P1 - P2) * normal_vector)
         
 
+mask0 = np.array(Image.open("../../data/output/ref_washing/mask0.jpg"))
+mask1 = np.array(Image.open("../../data/output/ref_washing/mask1.jpg"))
+colorized_depth = np.array(Image.open("../../data/output/ref_washing/depth.png")) # (H, W, 4)
+depth = colorized_depth[:, :, 0] # (H, W)
     
-find_key_depth_points()
+print(get_depth_gap(mask0, mask1, depth))
     
 
 # Set path of *.ply file
