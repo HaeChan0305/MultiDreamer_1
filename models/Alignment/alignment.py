@@ -1,8 +1,19 @@
-import trimesh
-import open3d as o3d
-
 import numpy as np
+import open3d as o3d
 from open3d import io, geometry
+from PIL import Image
+
+from geometry import depth_to_points
+
+
+# class Alignment():
+#     def __init__(self, input_path, mask_path, depth_path, mesh1_path, mesh2_path):
+#         self.input = np.array(Image.open(input_path))
+#         self.mask = np.array(Image.open(mask_path))
+#         self.depth = np.array(Image.open(depth_path))
+#         self.mesh1 = o3d.io.read_triangle_mesh(mesh1_path)
+#         self.mesh2 = o3d.io.read_triangle_mesh(mesh2_path)
+        
 
 def apply_transformation(mesh, translation=None, scale=None, rotation=None):
     """
@@ -36,7 +47,16 @@ def apply_transformation(mesh, translation=None, scale=None, rotation=None):
 
 def merge_meshes(mesh1, mesh2):
     return mesh1 + mesh2
+
+def find_key_depth_points():
+    mask0 = np.array(Image.open("../../data/output/ref_washing/mask0.jpg"))
+    mask1 = np.array(Image.open("../../data/output/ref_washing/mask1.jpg"))
+    depth = np.array(Image.open("../../data/output/ref_washing/depth.png"))
     
+    print(depth)
+    print(mask0)
+    
+
 def find_gap(vector, mesh):
     '''
     2번 함수
@@ -64,38 +84,25 @@ def find_gap(vector, mesh):
     P2 = visible_vertices[np.argmax(distance_vector)][:3]
     
     return np.abs((P1 - P2) * normal_vector)
-    
+        
 
     
-    
-    
-    
-    
-    
-    
-    
+find_key_depth_points()
     
 
-    
-
-
-    
-    
-    
 # Set path of *.ply file
-input = './examples/aircraft.ply'
-output = './examples/merged_aircraft.ply'
+# input = './examples/aircraft.ply'
+# output = './examples/merged_aircraft.ply'
 
-# Operation
-mesh1 = o3d.io.read_triangle_mesh(input)
-# mesh2 = apply_transformation(mesh1, translation=[2,2,2], scale=[1,1,1])
-# mesh = merge_meshes(mesh1, mesh2)
+# # Operation
+# mesh1 = o3d.io.read_triangle_mesh(input)
+# # mesh2 = apply_transformation(mesh1, translation=[2,2,2], scale=[1,1,1])
+# # mesh = merge_meshes(mesh1, mesh2)
 
-vertices = np.asarray(mesh1.vertices)
-print(vertices.shape)
-print(max(vertices[:, 0]), max(vertices[:, 1]), max(vertices[:, 2]))
-print(min(vertices[:, 0]), min(vertices[:, 1]), min(vertices[:, 2]))
+# vertices = np.asarray(mesh1.vertices)
+# print(vertices.shape)
+# print(max(vertices[:, 0]), max(vertices[:, 1]), max(vertices[:, 2]))
+# print(min(vertices[:, 0]), min(vertices[:, 1]), min(vertices[:, 2]))
 
 # Save Mesh
 #o3d.io.write_triangle_mesh(output, mesh)
-
