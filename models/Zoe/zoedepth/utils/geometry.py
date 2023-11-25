@@ -37,7 +37,6 @@ def get_intrinsics(H,W):
                      [0, 0, 1]])
 
 def depth_to_points(depth, R=None, t=None):
-    print(depth.shape, depth)
 
     K = get_intrinsics(depth.shape[1], depth.shape[2])
     Kinv = np.linalg.inv(K)

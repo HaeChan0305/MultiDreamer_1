@@ -50,9 +50,6 @@ def inference(image,level=1,*args, **kwargs):
             continue
         
         else:
-            ### TO DO ###
-            # - bounnding box 이미지 inpainting에 옮기기
-            
             seg = seg.astype(np.uint8) * 255
             segmentation = Image.fromarray(seg)
             segmentation = segmentation.resize(input_image.size)

@@ -43,7 +43,7 @@ model = build_model(conf).to(DEVICE)
 model.eval()
 
 # ****************** [2] prepare img ******************
-img = Image.open("data/test.png")
+img = Image.open("../../data/input/ref_washing.png")
 X = ToTensor()(img)
 
 if X.shape[0] == 4 : # if RGBA image transform to RGB format
@@ -55,18 +55,20 @@ X = X.unsqueeze(0).to(DEVICE)
 
 print("-"*10, "start predicting", "-"*10)
 with torch.no_grad():
-    out = model.infer(X).cpu()
+    out = model.infer(X).cpu() #(1, H, W) : 1.xx ~ 2.xx
 
-points = depth_to_points(out[0])
-new_img = colorize(out)
+points = depth_to_points(out[0].numpy()) #(H, W, 3) : -1.xx ~ 2.xx
+colorized_depth = colorize(out) #(H, W, 4) : 0 ~ 255  [100 100 100 255]
 
-depth = torch.from_numpy(new_img[:, :, 0])
+depth = torch.from_numpy(colorized_depth[:, :, 0]) #(H, W) : depth랑 colorized_depth랑 image로 변환했을 때 차이점은 없음. 
 assert torch.min(depth) == 0 and torch.max(depth) == 255
 
-print(depth) # [width * height] tensor of integer 0~255
-
-
 # Save depth map as image
-pred = Image.fromarray(new_img)
+pred = Image.fromarray(colorized_depth)
 pred = pred.resize(img.size, Image.LANCZOS)
-pred.save("data/pred.png")
+pred.save("../../data/output/colorized_depthmap.png")
+
+# Same result as above
+# pred = Image.fromarray(colorized_depth[:, :, 0])
+# pred = pred.resize(img.size)
+# pred.save("../../data/output/depthmap.png")
