@@ -22,11 +22,11 @@ def main():
     )
     pipe = pipe.to("cuda")
 
-    prompt = "background"
+    prompt = ""
 
     # image and mask_image should be PIL images.
     # The mask structure is white for inpainting and black for keeping as is
-    image = Image.open("/root/MultiDreamer/data/input/" + args.input).convert("RGBA")
+    image = Image.open("/root/MultiDreamer/data/input/" + args.input).convert("RGB")
 
     for i, bbox_result in enumerate(eval(args.bbox)):
         print(">> bbox_result: ")
@@ -39,23 +39,25 @@ def main():
 
         bbox = bbox_result['bounding_box']
 
-        mask_image = Image.new('L', image.size)
-        mask_array = np.array(mask_image)
+        bbox_img = Image.new('L', image.size)
+        mask_array = np.array(bbox_img)
         mask_array[bbox['y_min']:bbox['y_max'], bbox['x_min']:bbox['x_max']] = 255
-        modified_mask_image = Image.fromarray(mask_array).convert("1")
+        modified_bbox_img = Image.fromarray(mask_array).convert("1")
 
-        seg_image = Image.open("/root/MultiDreamer/data/output/" + output_folder_name + "/" + mask_name2 + ".jpg").convert("1")
+        seg_img = Image.open("/root/MultiDreamer/data/output/" + output_folder_name + "/" + mask_name2 + ".jpg").convert("1")
 
-        intersection_image = ImageChops.logical_and(modified_mask_image, seg_image)
+        intersection_image = ImageChops.logical_and(modified_bbox_img, seg_img).convert("L")
 
         input_bbox_image = input_bbox_image.point(lambda p: p > 128 and 255)
-        result_image = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        result_image = Image.new("RGB", image.size, (0, 0, 0))
         result_image.paste(image, mask=input_bbox_image)
         result_image = result_image.convert("RGB")
 
         result_image.save("/root/MultiDreamer/data/output/" + output_folder_name + f"/input{i}.jpg")
 
         image_result = pipe(prompt=prompt, image=result_image, mask_image=intersection_image).images[0]
+        
+        result_image.save("/root/MultiDreamer/data/output/" + output_folder_name + f"/result_image{i}.jpg")
         image_result.save("/root/MultiDreamer/data/output/" + output_folder_name + f"/inpainting{i}.jpg")
         intersection_image.save("/root/MultiDreamer/data/output/" + output_folder_name + f"/mask_intersection_test{i}.jpg")
 
