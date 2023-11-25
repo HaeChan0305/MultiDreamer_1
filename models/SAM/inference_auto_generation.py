@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from semantic_sam.BaseModel import BaseModel
 from semantic_sam import build_model
 from utils.arguments import load_opt_from_config_file
+import os
 
 from tasks import interactive_infer_image_idino_m2m_auto
 
@@ -15,8 +16,7 @@ def parse_option():
     parser.add_argument('--conf_files', default="configs/semantic_sam_only_sa-1b_swinL.yaml", metavar="FILE", help='path to config file', )
     parser.add_argument('--ckpt', default="models/swinl_only_sam_many2many.pth", metavar="FILE", help='path to ckpt', )
     parser.add_argument('--level', default=1, )
-    parser.add_argument('--input', default="images/sofa_table.jpg", help='path to the input image', )
-    parser.add_argument('--output', default="outputs/", help='path to the output image', )
+    parser.add_argument('--input', default="ref_washing.png", help='input image should be in data/input folder', )
     args = parser.parse_args()
     return args
 
@@ -41,39 +41,46 @@ def inference(image,level=1,*args, **kwargs):
     with torch.autocast(device_type='cuda', dtype=torch.float16):
         semantic=False
         model=model_sam
-        a = interactive_infer_image_idino_m2m_auto(model, image, level, text, text_part, text_thresh, text_size, hole_scale, island_scale, semantic, *args, **kwargs)
-        return a
+        results = interactive_infer_image_idino_m2m_auto(model, image, level, text, text_part, text_thresh, text_size, hole_scale, island_scale, semantic, *args, **kwargs)
 
-input_image = Image.open(args.input).convert("RGB")
+    bbox_results = []
+    for i, result in enumerate(results):
+        seg = result['segmentation']
+        if seg[0][0]:
+            continue
+        
+        else:
+            ### TO DO ###
+            # - bounnding box 이미지 inpainting에 옮기기
+            
+            seg = seg.astype(np.uint8) * 255
+            segmentation = Image.fromarray(seg)
+            segmentation = segmentation.resize(input_image.size)
+            seg = np.array(segmentation)
+            segmentation.save("/root/MultiDreamer/data/output/" + output_folder_name + f"/mask{i}.jpg")
+            
+            x = np.sum(seg, axis=0)
+            x = np.where((x!=0), 1, 0)
+            x_min = np.argmax(x)
+            x_max = len(x) - np.argmax(np.flip(x)) - 1
+            
+            y = np.sum(seg, axis=1)
+            y = np.where((y!=0), 1, 0)
+            y_min = np.argmax(y)
+            y_max = len(y) - np.argmax(np.flip(y)) - 1
+            
+            # new_results.append({'segmentation':seg, 'bounding_box':{'x_min': x_min, 'x_max': x_max, 'y_min': y_min, 'y_max': y_max}})
+            bbox_results.append({'mask_name':f"mask{i}", 'bounding_box':{'x_min': x_min, 'x_max': x_max, 'y_min': y_min, 'y_max': y_max}})
+            draw.rectangle((x_min, y_max, x_max, y_min), outline=(0,255,0), width = 3)
+
+    return bbox_results
+
+input_image = Image.open("/root/MultiDreamer/data/input/" + args.input).convert("RGB")
+
 draw = ImageDraw.Draw(input_image)
-results = inference(input_image, args.level)
+output_folder_name = args.input.split('.')[0]
+os.makedirs("/root/MultiDreamer/data/output/" + output_folder_name, exist_ok=True)
 
-new_results = []
-for i, result in enumerate(results):
-    seg = result['segmentation']
-    if seg[0][0]:
-        continue
-    
-    else:
-        seg = seg.astype(np.uint8) * 255
-        segmentation = Image.fromarray(seg)
-        segmentation = segmentation.resize(input_image.size)
-        seg = np.array(segmentation)
-        segmentation.save(args.output + f"mask_test{i}.jpg")
-        
-        x = np.sum(seg, axis=0)
-        x = np.where((x!=0), 1, 0)
-        x_min = np.argmax(x)
-        x_max = len(x) - np.argmax(np.flip(x)) - 1
-        
-        y = np.sum(seg, axis=1)
-        y = np.where((y!=0), 1, 0)
-        y_min = np.argmax(y)
-        y_max = len(y) - np.argmax(np.flip(y)) - 1
-        
-        new_results.append({'segmentation':seg, 'bounding_box':{'x_min': x_min, 'x_max': x_max, 'y_min': y_min, 'y_max': y_max}})
-        print(new_results)
-        
-        draw.rectangle((x_min, y_max, x_max, y_min), outline=(0,255,0), width = 3)
-
-input_image.save(args.output + f"test_1124.jpg")
+bounding_box_results = inference(input_image, args.level, draw)
+print(bounding_box_results)
+input_image.save("/root/MultiDreamer/data/output/" + output_folder_name + f"/bbox.jpg")
