@@ -36,26 +36,47 @@ def apply_transformation(mesh, translation=None, scale=None, rotation=None):
 
 def merge_meshes(mesh1, mesh2):
     return mesh1 + mesh2
-
-def find_closest_vertex(normal_vector, mesh):
-    '''
-    - Find the vertex in the given mesh with the closest distance to the plane
-    - The plane is formed by the given normal vector and a point on the vector. 
-    - Ensure that the point on the vector is outside of a unit cube.
     
-    normal_vector : np.array([A, B, C])
-    plane_eqation : Ax + By + Cz + D = 0
-    plane_vector  : np.array([A, B, C, D])
-    D = - np.linalg.norm(normal_vector), this condition guarantees that plane is outside of a unit cube. 
+def find_gap(vector, mesh):
     '''
+    2번 함수
     
-    plane_vector = np.concatenate((normal_vector, [-np.linalg.norm(normal_vector)]), axis=-1)
+    - vector : np.array([A, B, C]), 원점에서 카메라 방향의 벡터.
+    - normal_vector : np.array([a, b, c]), normalized vector.
+    - plane : vector를 법선벡터로 가지고, vector 위를 지나는 임의의 점을 지나는 평면, 단 평면은 unit cube 밖에 있어야 함. 
+    = plane_vector : np.array([a, b, c, d]), when plane is defied as aX + bY + cZ + d = 0. (l2 norm of (a, b, c) = 1 and d=-1)
+    - P1 : mesh vertex 중 plane과 가장 가까운 점.
+    - P2 : mesh vertex 중, vector 방향으로 orthogonal view로 봤을 때, plane과 가장 먼 점.
+    - gap : distance(P1, P2)와 normal_vector의 내적
+    '''
     
     vertices = np.asarray(mesh.vertices)
-    vertices_ = np.concatenate((vertices, np.ones((vertices.shape[0], 1))), axis=1)
-    distance_vector = 1/np.linalg.norm(normal_vector) * vertices_ @ plane_vector
-    return vertices[np.argmin(distance_vector)]
+    normal_vector = vector / np.linalg.norm(vector)
+    projections = vertices @ normal_vector
+    
+    vertices = np.concatenate((vertices, np.ones((vertices.shape[0], 1))), axis=1)
+    plane_vector = np.concatenate((normal_vector, [-1]), axis=-1)
+    distance_vector = np.abs(vertices @ plane_vector)
+    
+    P1 = vertices[np.argmin(distance_vector)][:3]
+    
+    visible_vertices = vertices[projections >= 0]
+    P2 = visible_vertices[np.argmax(distance_vector)][:3]
+    
+    return np.abs((P1 - P2) * normal_vector)
+    
 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+    
 
 
     
