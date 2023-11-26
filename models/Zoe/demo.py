@@ -30,6 +30,7 @@ import torch
 from zoedepth.models.builder import build_model
 from zoedepth.utils.config import get_config
 from zoedepth.utils.geometry import depth_to_points
+from zoedepth.ui.gradio_im_to_3d import get_mesh
 
 # ****************** [1] prepare model ******************
 print("-"*10, "prepare model", "-"*10)
@@ -51,24 +52,38 @@ if X.shape[0] == 4 : # if RGBA image transform to RGB format
 
 X = X.unsqueeze(0).to(DEVICE)
 
-# ****************** [3] predict depth ******************
+# ****************** [3-1] predict depth ******************
 
-print("-"*10, "start predicting", "-"*10)
-with torch.no_grad():
-    out = model.infer(X).cpu() #(1, H, W) : 1.xx ~ 2.xx
+# print("-"*10, "start predicting", "-"*10)
+# with torch.no_grad():
+#     out = model.infer(X).cpu() #(1, H, W) : 1.xx ~ 2.xx
 
-points = depth_to_points(out[0].numpy()) #(H, W, 3) : -1.xx ~ 2.xx
-colorized_depth = colorize(out) #(H, W, 4) : 0 ~ 255  [100 100 100 255]
+# tensor 내에 최댓값이 몇개인지 count해주는 함수
+# max_value = torch.max(out)
+# max_mask = out == max_value
+# count_max = int(torch.sum(max_mask).item())
+# print("Number of maximum: ", count_max)
+#--
+# out = out.squeeze()
+# print(out.shape)
+# torch.save(out, "../../data/output/depth_value.pt")
 
-depth = torch.from_numpy(colorized_depth[:, :, 0]) #(H, W) : depth랑 colorized_depth랑 image로 변환했을 때 차이점은 없음. 
-assert torch.min(depth) == 0 and torch.max(depth) == 255
+# points = depth_to_points(out[0].numpy()) #(H, W, 3) : -1.xx ~ 2.xx
+# colorized_depth = colorize(out) #(H, W, 4) : 0 ~ 255  [100 100 100 255]
 
-# Save depth map as image
-pred = Image.fromarray(colorized_depth)
-pred = pred.resize(img.size, Image.LANCZOS)
-pred.save("../../data/output/colorized_depthmap.png")
+# depth = torch.from_numpy(colorized_depth[:, :, 0]) #(H, W) : depth랑 colorized_depth랑 image로 변환했을 때 차이점은 없음. 
+# assert torch.min(depth) == 0 and torch.max(depth) == 255
+
+# # Save depth map as image
+# pred = Image.fromarray(colorized_depth)
+# pred = pred.resize(img.size, Image.LANCZOS)
+# pred.save("../../data/output/colorized_depthmap.png")
 
 # Same result as above
 # pred = Image.fromarray(colorized_depth[:, :, 0])
 # pred = pred.resize(img.size)
 # pred.save("../../data/output/depthmap.png")
+
+# ****************** [3-2] predict mesh ******************
+output_path = "../../data/output/zoedepth_mesh.ply"
+get_mesh(model, img.convert('RGB'), output_path)
