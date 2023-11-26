@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import open3d as o3d
 from open3d import io, geometry
 from PIL import Image
@@ -53,14 +54,14 @@ def get_depth_info(mask, depth):
     Find the positions and the depth values which are max and min in the given mask area.
     
     - mask  : np.array, (H, W) : 0 or 255
-    - depth : np.array, (H, W) : 0 ~ 255
+    - depth : np.array, (H, W) : 1.xx ~ 2.xx 값인거 같은데 min max 값을 모르겠음. zoedepth model output
     
     '''
-    max_mask = np.where(mask==255, depth, -1)
+    max_mask = np.where(mask==255, depth, -np.inf)
     max_pos = np.unravel_index(np.argmax(max_mask), depth.shape)
     max_depth = max_mask[max_pos[0], max_pos[1]]
     
-    min_mask = np.where(mask==255, depth, 256)
+    min_mask = np.where(mask==255, depth, np.inf)
     min_pos = np.unravel_index(np.argmin(min_mask), depth.shape)
     min_depth = min_mask[min_pos[0], min_pos[1]]
     
@@ -76,8 +77,8 @@ def get_depth_info(mask, depth):
         depth[max_pos[0], max_pos[1]] = 0
         depth[min_pos[0], min_pos[1]] = 255
 
-        pred = Image.fromarray(depth)
-        pred.save("../../data/output/depth_minmax_debugging.png")
+        pred = Image.fromarray(depth) # depth를 colorize되기 전으로 바꿨을 때, depth 값이 소수점이 있는데, 이 경우 확장자가 tiff여야됨.
+        pred.save("../../data/output/depth_minmax_debugging.tiff")
         
     return max_pos, max_depth, min_pos, min_depth
     
@@ -89,7 +90,7 @@ def get_depth_gap(mask1, mask2, depth):
     Argument :
         - mask1 : np.array, 0 or 255, object1 에 대한 mask
         - mask2 : np.array, 0 or 255, object2 에 대한 mask, 
-        - depth : mp.array, 0 ~ 255,
+        - depth : np.array, 1.xx ~ 2.xx 값인거 같은데 min max 값을 모르겠음. zoedepth model output
     
     return :
         - a, object1 내에서 가장 큰 depth 차이 값
@@ -110,7 +111,7 @@ def get_mesh_distance_gap(vector, mesh):
     - vector : np.array([A, B, C]), 원점에서 카메라 방향의 벡터.
     - normal_vector : np.array([a, b, c]), normalized vector.
     - plane : vector를 법선벡터로 가지고, vector 위를 지나는 임의의 점을 지나는 평면, 단 평면은 unit cube 밖에 있어야 함. 
-    = plane_vector : np.array([a, b, c, d]), when plane is defied as aX + bY + cZ + d = 0. (l2 norm of (a, b, c) = 1 and d=-1)
+    - plane_vector : np.array([a, b, c, d]), when plane is defied as aX + bY + cZ + d = 0. (l2 norm of (a, b, c) = 1 and d=-1)
     - P1 : mesh vertex 중 plane과 가장 가까운 점.
     - P2 : mesh vertex 중, vector 방향으로 orthogonal view로 봤을 때, plane과 가장 먼 점.
     - gap : distance(P1, P2)와 normal_vector의 내적
@@ -131,13 +132,21 @@ def get_mesh_distance_gap(vector, mesh):
     
     return np.abs((P1 - P2) * normal_vector)
         
+def depth_to_point():
+    pass
 
 mask0 = np.array(Image.open("../../data/output/ref_washing/mask0.jpg"))
 mask1 = np.array(Image.open("../../data/output/ref_washing/mask1.jpg"))
-colorized_depth = np.array(Image.open("../../data/output/ref_washing/depth.png")) # (H, W, 4)
-depth = colorized_depth[:, :, 0] # (H, W)
-    
-print(get_depth_gap(mask0, mask1, depth))
+
+# colorized_depth = np.array(Image.open("../../data/output/ref_washing/depth.png")) # (H, W, 4)
+# depth = colorized_depth[:, :, 0] # (H, W)  
+depth = torch.load("../../data/output/depth_value.pt").numpy()  # (H, W)  
+
+print(depth.shape)
+print(np.max(depth))
+print(np.min(depth))
+
+#print(get_depth_gap(mask0, mask1, depth))
     
 
 # Set path of *.ply file
