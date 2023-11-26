@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from pathlib import Path
+import os
 
 import trimesh
 from omegaconf import OmegaConf
@@ -120,22 +121,30 @@ def extract_mesh(model, output, resolution=512):
 
     # output geometry
     mesh = trimesh.Trimesh(vertices, triangles, vertex_colors=vertex_colors)
-    mesh.export(str(f'{output}/mesh.ply'))
+    mesh.export(output)
 
-def render_mesh(name):
-
+def render_mesh(name, index, ground_truth=False, gpu=1):
+    gpus = str(gpu) + ","
     """
     python3 train_renderer.py -i output/piano.png \
                             -n piano \
                             -b configs/neus.yaml \
                             -l output/renderer
     """
-    input_path = "output/" + name + ".png"
-    output_path = "output"
+    if ground_truth == True :
+        input_path = "../../data/output/" + name + "/sync_output.png" 
+        output_path = "../../data/output/" + name + "/mesh"
+        output_path_mesh = "../../data/output/" + name + "/mesh.ply"
+    else :
+        input_path = "../../data/output/" + name + "/sync_output" + index + ".png"
+        output_path = "../../data/output/" + name + "/mesh" + index
+        output_path_mesh = "../../data/output/" + name + "/mesh" + index + ".ply"
+
+
 
     # configs
     cfg = OmegaConf.load("configs/neus.yaml")
-    log_dir, ckpt_dir = Path(output_path) / name, Path(output_path) / name / 'ckpt'
+    log_dir, ckpt_dir = Path(output_path), Path(output_path) / 'ckpt'
     cfg.model.params['image_path'] = input_path
     cfg.model.params['log_dir'] = log_dir
 
@@ -166,7 +175,7 @@ def render_mesh(name):
     trainer_config.update({
         "accelerator": "cuda", "check_val_every_n_epoch": None,
         "benchmark": True, "num_sanity_val_steps": 0,
-        "devices": 1, "gpus": "1,",
+        "devices": 1, "gpus": gpus,
     })
 
     if (ckpt_dir / 'last.ckpt').exists():
@@ -177,7 +186,11 @@ def render_mesh(name):
 
     model = model.cuda().eval()
 
-    extract_mesh(model, log_dir)
+    # extract mesh file in the directory "data/output/{name}/mesh{index}.ply"
+    extract_mesh(model, output_path_mesh)
+
+    # if needed remove all logs
+    os.removedirs(output_path)
 
 # if __name__=="__main__":
 #     main()

@@ -69,10 +69,10 @@ def inference(image,level=1,*args, **kwargs):
             # new_results.append({'segmentation':seg, 'bounding_box':{'x_min': x_min, 'x_max': x_max, 'y_min': y_min, 'y_max': y_max}})
             bbox_results.append({'mask_name':f"mask{i}", 'bounding_box':{'x_min': x_min, 'x_max': x_max, 'y_min': y_min, 'y_max': y_max}})
             draw.rectangle((x_min, y_max, x_max, y_min), outline=(0,255,0), width = 3)
-
+    
     return bbox_results
 
-input_image = Image.open("/root/MultiDreamer/data/input/" + args.input).convert("RGB")
+input_image = Image.open("/root/MultiDreamer/data/input/eval/" + args.input).convert("RGB")
 
 draw = ImageDraw.Draw(input_image)
 output_folder_name = args.input.split('.')[0]

@@ -24,7 +24,7 @@ def apply_transformation(mesh, translation=None, scale=None, rotation=None):
     - mesh: open3d.geometry.TriangleMesh, the 3D mesh.
     - translation: 3-element list or numpy array, translation along x, y, z axes.
     - scale: 3-element list or numpy array, scaling along x, y, z axes.
-    - rotation: 4-element list or numpy array, rotation angle and it's axis.
+    - rotation: 4-element list or numpy array, [rotation axis, degree of rotation angle].
 
     Returns:
     - open3d.geometry.TriangleMesh, the transformed mesh.
@@ -40,8 +40,12 @@ def apply_transformation(mesh, translation=None, scale=None, rotation=None):
         mesh.transform(scale_matrix)
 
     if rotation is not None:
-        quaternion = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation[0], rotation[1:])
-        mesh.rotate(quaternion, center=(0, 0, 0))
+        rotation = np.array(rotation)
+        angle = np.radians(rotation[3])
+        axis = rotation[:3] / np.linalg.norm(rotation[:3])
+        rotation_matrix = o3d.geometry.get_rotation_matrix_from_axis_angle(np.multiply(axis, angle))
+        
+        mesh.rotate(rotation_matrix)
 
     return mesh
 
@@ -135,33 +139,36 @@ def get_mesh_distance_gap(vector, mesh):
 def depth_to_point():
     pass
 
-mask0 = np.array(Image.open("../../data/output/ref_washing/mask0.jpg"))
-mask1 = np.array(Image.open("../../data/output/ref_washing/mask1.jpg"))
+# mask0 = np.array(Image.open("../../data/output/ref_washing/mask0.jpg"))
+# mask1 = np.array(Image.open("../../data/output/ref_washing/mask1.jpg"))
 
-# colorized_depth = np.array(Image.open("../../data/output/ref_washing/depth.png")) # (H, W, 4)
-# depth = colorized_depth[:, :, 0] # (H, W)  
-depth = torch.load("../../data/output/depth_value.pt").numpy()  # (H, W)  
+# # colorized_depth = np.array(Image.open("../../data/output/ref_washing/depth.png")) # (H, W, 4)
+# # depth = colorized_depth[:, :, 0] # (H, W)  
+# depth = torch.load("../../data/output/depth_value.pt").numpy()  # (H, W)  
 
-print(depth.shape)
-print(np.max(depth))
-print(np.min(depth))
+# print(depth.shape)
+# print(np.max(depth))
+# print(np.min(depth))
 
 #print(get_depth_gap(mask0, mask1, depth))
     
 
 # Set path of *.ply file
-# input = './examples/aircraft.ply'
-# output = './examples/merged_aircraft.ply'
+input = '../../data/output/chair.ply'
+output = '../../data/output/rotated_chair.ply'
 
 # # Operation
-# mesh1 = o3d.io.read_triangle_mesh(input)
-# # mesh2 = apply_transformation(mesh1, translation=[2,2,2], scale=[1,1,1])
+mesh1 = o3d.io.read_triangle_mesh(input)
+#rotated_mesh1 = apply_transformation(mesh1, rotation = [0, 1, 0, 30])
+
+
 # # mesh = merge_meshes(mesh1, mesh2)
 
-# vertices = np.asarray(mesh1.vertices)
-# print(vertices.shape)
-# print(max(vertices[:, 0]), max(vertices[:, 1]), max(vertices[:, 2]))
-# print(min(vertices[:, 0]), min(vertices[:, 1]), min(vertices[:, 2]))
+vertices = np.asarray(mesh1.vertices)
+print(vertices.shape)
+print(max(vertices[:, 0]), max(vertices[:, 1]), max(vertices[:, 2]))
+print(min(vertices[:, 0]), min(vertices[:, 1]), min(vertices[:, 2]))
 
 # Save Mesh
-#o3d.io.write_triangle_mesh(output, mesh)
+#o3d.io.write_triangle_mesh(output, rotated_mesh1)
+

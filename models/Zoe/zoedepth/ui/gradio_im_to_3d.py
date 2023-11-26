@@ -55,9 +55,13 @@ def get_mesh(model, image, output_path, keep_edges=False):
     '''
     imgae : PIL.Image, must be 'RGB' not 'RGBA'
     '''
+    print(image.size)
     image.thumbnail((1024,1024))  # limit the size of the input image
+    print(image.size)
     depth = predict_depth(model, image)
     pts3d = depth_to_points(depth[None])
+    print(pts3d.shape)
+    
     pts3d = pts3d.reshape(-1, 3)
 
     # Create a trimesh mesh from the points
@@ -77,7 +81,7 @@ def get_mesh(model, image, output_path, keep_edges=False):
     mesh.triangles = o3d.utility.Vector3iVector(triangles)
     mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
     o3d.io.write_triangle_mesh(output_path, mesh)
-    return output_path
+    return mesh
 
 # def create_demo(model):
 

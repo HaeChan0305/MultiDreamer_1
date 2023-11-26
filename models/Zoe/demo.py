@@ -44,7 +44,7 @@ model = build_model(conf).to(DEVICE)
 model.eval()
 
 # ****************** [2] prepare img ******************
-img = Image.open("../../data/input/ref_washing.png")
+img = Image.open("../../data/haechan_test/toycar_and_chair.png")
 X = ToTensor()(img)
 
 if X.shape[0] == 4 : # if RGBA image transform to RGB format
@@ -54,9 +54,9 @@ X = X.unsqueeze(0).to(DEVICE)
 
 # ****************** [3-1] predict depth ******************
 
-# print("-"*10, "start predicting", "-"*10)
-# with torch.no_grad():
-#     out = model.infer(X).cpu() #(1, H, W) : 1.xx ~ 2.xx
+print("-"*10, "start predicting", "-"*10)
+with torch.no_grad():
+    out = model.infer(X).cpu() #(1, H, W) : 1.xx ~ 2.xx
 
 # tensor 내에 최댓값이 몇개인지 count해주는 함수
 # max_value = torch.max(out)
@@ -84,6 +84,11 @@ X = X.unsqueeze(0).to(DEVICE)
 # pred = pred.resize(img.size)
 # pred.save("../../data/output/depthmap.png")
 
-# ****************** [3-2] predict mesh ******************
-output_path = "../../data/output/zoedepth_mesh.ply"
+# ****************** [3-2] depth_to_points ******************
+pts3d = depth_to_points(out[0].numpy(), R=None, t=None)
+print(pts3d.shape)
+print(min(pts3d[:, 0]), min(pts3d[:, 1]), min(pts3d[:, 2]))
+
+# ****************** [3-3] predict mesh ******************
+output_path = "../../data/haechan_test/depth_to_mesh.ply"
 get_mesh(model, img.convert('RGB'), output_path)
