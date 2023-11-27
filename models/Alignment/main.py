@@ -1,8 +1,9 @@
 import numpy as np
+import cupy as cp
 import torch
 import open3d as o3d
 from PIL import Image
-import spicy
+import scipy
 
 
 #############
@@ -106,30 +107,53 @@ def uniform_sampling(points, M):
     point_cloud.points = o3d.utility.Vector3dVector(points)
 
     sampling_rate = points.shape[0] // M
-    sampled_point_cloud = o3d.geometry.uniform_down_sample(point_cloud, every_k_points=sampling_rate)
+    sampled_point_cloud = point_cloud.uniform_down_sample(every_k_points=sampling_rate)
     sampled_points = np.array(sampled_point_cloud.points)
     
     print(">>> uniform_sampling : ", points.shape[0], "->", sampled_points.shape[0])
     return sampled_points
     
-def rest_sampling(points, M):
-    assert points.shape[0] > M
+
+def random_sampling(points, M):
+    N = points.shape[0]
+    assert N > M
     
+    indices = np.random.choice(N, size=M, replace=False)
+    sampled_points = points[indices, :]
+    
+    print(">>> random_sampling : ", points.shape[0], "->", sampled_points.shape[0])
+    return sampled_points
+
 
 def sampling(mesh, masked_depth_to_points):
     mesh_points = np.array(mesh.vertices)
     M, _ = masked_depth_to_points.shape
     
     sampled_points = vertex_normal_sampling(mesh_points, M)
-    sampled_points = uniform_sampling(sampled_points, M)
     
-    if sampled_points > M:
-        pass
-    elif sampled_points < M:
-        pass
+    # 원래 코드
+    # sampled_points = uniform_sampling(sampled_points, M)
+    # N = sampled_points.shape[0]
     
-    assert sampled_points.shape[0] == M
-    return sampled_points
+    # if N > M:
+    #     sampled_points = random_sampling(sampled_points, M)
+    # elif N < M:
+    #     sampled_points = random_sampling(masked_depth_to_points, N)
+    
+    # 연산량 감소하기 위한 코드
+    sampled_points = uniform_sampling(sampled_points, 10000)
+    sampled_depth_to_points = uniform_sampling(masked_depth_to_points, 10000)
+    N = sampled_points.shape[0]
+    M = sampled_depth_to_points.shape[0]
+    
+    if N > M:
+        sampled_points = random_sampling(sampled_points, M)
+    elif N < M:
+        sampled_depth_to_points = random_sampling(sampled_depth_to_points, N)
+    
+    
+    assert sampled_points.shape[0] == sampled_depth_to_points.shape[0]
+    return sampled_points, sampled_depth_to_points
     
 
 #############
@@ -140,76 +164,60 @@ def sampling(mesh, masked_depth_to_points):
 #   - d : (4, 4), X_를 scaling, translation 시키는 transformation matrix 
 #############
 def chamfer_distance(X, Y):
-    dist_x_to_y = np.linalg.norm(X[:, None, :] - Y, axis=-1).min(axis=-1)
-    dist_y_to_x = np.linalg.norm(Y[:, None, :] - X, axis=-1).min(axis=-1)
+    # print(">>> IN  : chamfer_distacne()")
+    dist_x_to_y = cp.linalg.norm(X[:, None, :] - Y, axis=-1).min(axis=-1)
+    dist_y_to_x = cp.linalg.norm(Y[:, None, :] - X, axis=-1).min(axis=-1)
     
-    total_distance = np.sum(dist_x_to_y) + np.sum(dist_y_to_x)
+    total_distance = cp.sum(dist_x_to_y) + cp.sum(dist_y_to_x)
+    # print(">>> OUT : chamfer_distacne()")
     return total_distance
 
 def params_to_matrix(params):
     '''
-    params : np.array([sx, sy, sz, tx, ty, tz])
+    params : np.array([s, tx, ty, tz])
     '''
-    sx, sy, sz, tx, ty, tz = params
-    return np.array([[sx,  0,  0, 0],
-                     [0,  sy,  0, 0],
-                     [0,   0, sz, 0],
+    s, tx, ty, tz = params
+    return np.array([[s,   0,  0, 0],
+                     [0,   s,  0, 0],
+                     [0,   0,  s, 0],
                      [tx, ty, tz, 1]])
 
 def objective_function(params, x, y):
     '''
-    params : np.array([sx, sy, sz, tx, ty, tz]), six elements for transformation
+    params : np.array([s, tx, ty, tz]), six elements for transformation
     x : sampled vertices in the mesh
     y : masked points in the depth_to_points
     '''
-    matrix = params_to_matrix(params)
+    matrix_cpu = params_to_matrix(params)
+    matrix_gpu = cp.asarray(matrix_cpu)
     
-    x = np.hstack((x, np.ones((x.shape[0], 1))))
-    y_ = x @ matrix
-    y_ = y_[:, :-1]
-    return chamfer_distance(y, y_)
+    x_cpu = np.hstack((x, np.ones((x.shape[0], 1))))
+    x_gpu = cp.asarray(x_cpu)
+    y_gpu_ = x_gpu @ matrix_gpu
+    y_gpu_ = y_gpu_[:, :-1]
+    y_gpu = cp.asarray(y)
+    
+    result_gpu = chamfer_distance(y_gpu, y_gpu_)
+    result_cpu = result_gpu.get()
+    return result_cpu
 
 
-def optimizeing(x, y):
+def optimizing(x, y):
     '''
     x : sampled vertices in the mesh
     y : masked points in the depth_to_points
     params : np.array([sx, sy, sz, tx, ty, tz]), six elements for transformation
     '''
-    initial_params = np.random.randn(6)
-    result = spicy.optimize.minimize(objective_function, initial_params, args=(x, y), method='BFGS')
+    initial_params = np.random.randn(4)
+    result = scipy.optimize.minimize(objective_function, initial_params, args=(x, y), method='BFGS')
     
     optimized_params = result.x
-    return optimized_params
-    
-    
-#############
-# Applying
-#   - optimized_matrix를 mesh vertices에 적용시킴.
-#############
-def applying_transformation(mesh, optimized_params):
-    '''
-    무조건 scaling 먼저!
-    '''
-    
-    # Scaling
-    scale = optimized_params[:3]
-    scale_matrix = np.identity(4)
-    np.fill_diagonal(scale_matrix[:3, :3], scale)
-    mesh = mesh.transform(scale_matrix)
-    
-    # Translation
-    translation = optimized_params[3:]
-    translation_matrix = np.identity(4)
-    translation_matrix[:3, 3] = translation
-    mesh = mesh.transform(translation_matrix)
-    
-    return mesh
+    optimized_matrix = params_to_matrix(optimized_params)
+    return optimized_matrix
     
 
 def main():
     # input으로 받을 수 있게 변경할 것.
-    input_path = "../../data/input/toycar_and_chair.png"
     mask0_path = "../../data/output/1/mask0.jpg"
     mask1_path = "../../data/output/1/mask1.jpg"
     mesh0_path = "../../data/output/1/mesh0.ply"
@@ -217,7 +225,7 @@ def main():
     depth_to_points_path = "../../data/output/1/depth.npy"
 
     # Load data
-    input = np.array(Image.open(input_path))
+    print(">>> Loading data ...")
     mask0 = np.array(Image.open(mask0_path))
     mask1 = np.array(Image.open(mask1_path))
     mesh0 = o3d.io.read_triangle_mesh(mesh0_path)
@@ -225,6 +233,7 @@ def main():
     depth_to_points = np.load(depth_to_points_path)
 
     # Rotation
+    print(">>> Rotation ...")
     rotated_mesh0 = rotation_alignment(mesh0)
     rotated_mesh1 = rotation_alignment(mesh1)
 
@@ -232,22 +241,27 @@ def main():
     o3d.io.write_triangle_mesh('../../data/output/1/rotated_mesh1.ply', rotated_mesh1)
     
     # Masking
+    print(">>> Masking ...")
     masked_points0 = masking(mask0, depth_to_points)
     masked_points1 = masking(mask1, depth_to_points)
     
     # Sampling
-    sampled_points0 = sampling(mesh0, masked_points0)
-    sampled_points1 = sampling(mesh1, masked_points1)
+    print(">>> Sampling ...")
+    sampled_points0, sampled_masked_points0 = sampling(rotated_mesh0, masked_points0)
+    sampled_points1, sampled_masked_points1 = sampling(rotated_mesh1, masked_points1)
     
     # Optimizing
-    optimized_params0 = optimizeing(sampled_points0, masked_points0)
-    optimized_params1 = optimizeing(sampled_points1, masked_points1)
+    print(">>> Optimizing ...")
+    optimized_matrix0 = optimizing(sampled_points0, sampled_masked_points0)
+    optimized_matrix1 = optimizing(sampled_points1, sampled_masked_points1)
     
     # Applying
-    result_mesh0 = applying_transformation(rotated_mesh0, optimized_params0)
-    result_mesh1 = applying_transformation(rotated_mesh1, optimized_params1)
+    print(">>> Applying ...")
+    result_mesh0 = rotated_mesh0.transform(optimized_matrix0)
+    result_mesh1 = rotated_mesh1.transform(optimized_matrix1)
     
     # Exporting
+    print(">>> Exporting ...")
     output0 = "../../data/output/1/result_mesh0.ply"
     output1 = "../../data/output/1/result_mesh1.ply"
     o3d.io.write_triangle_mesh(output0, result_mesh0)
