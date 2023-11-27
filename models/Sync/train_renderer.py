@@ -190,7 +190,7 @@ def render_mesh(name, index, ground_truth=False, gpu=1):
     extract_mesh(model, output_path_mesh)
 
     # if needed remove all logs
-    os.removedirs(output_path)
+    # os.removedirs(output_path)
 
 # if __name__=="__main__":
 #     main()

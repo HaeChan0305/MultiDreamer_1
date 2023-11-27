@@ -1,5 +1,5 @@
 from diffusers import StableDiffusionInpaintPipeline
-from PIL import Image, ImageChops, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 import numpy as np
 import argparse
 import os
@@ -7,6 +7,24 @@ import glob
 
 def calculate_bbox_area(bbox):
     return (bbox['x_max'] - bbox['x_min']) * (bbox['y_max'] - bbox['y_min'])
+
+def expand_mask(mask_image):
+    mask = np.array(mask_image)
+    x = np.sum(mask, axis=0)
+    x = np.where((x!=0), 1, 0)
+    x_min = np.argmax(x)
+    x_max = len(x) - np.argmax(np.flip(x)) - 1
+    
+    y = np.sum(mask, axis=1)
+    y = np.where((y!=0), 1, 0)
+    y_min = np.argmax(y)
+    y_max = len(y) - np.argmax(np.flip(y)) - 1
+    
+    expanded_mask_image = Image.new('L', mask_image.size, color=0)
+    draw = ImageDraw.Draw(expanded_mask_image)
+    draw.rectangle([x_min, y_min, x_max, y_max], fill=255)
+    
+    return expanded_mask_image
 
 def main():
     parser = argparse.ArgumentParser('Inpainting Demo', add_help=False)
@@ -25,7 +43,7 @@ def main():
     )
     pipe = pipe.to("cuda")
 
-    prompt = "just the input image"
+    prompt = ""
 
     # image and mask_image should be PIL images.
     # The mask structure is white for inpainting and black for keeping as is
@@ -61,7 +79,8 @@ def main():
         seg_img = Image.open("/root/MultiDreamer/data/output/" + output_folder_name + "/" + mask_name2 + ".jpg").convert("1")
 
         intersection_image = ImageChops.logical_and(modified_bbox_img, seg_img).convert("L")
-
+        intersection_image = expand_mask(intersection_image)
+        
         # input image에서 각각의 mask 모양대로 자르기
         input_mask_image = input_mask_image.point(lambda p: p > 128 and 255)
         result_image = Image.new("RGB", image.size, (0, 0, 0))
