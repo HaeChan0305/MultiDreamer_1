@@ -51,7 +51,7 @@ def predict_depth(model, image):
     depth = model.infer_pil(image)
     return depth
 
-def get_mesh(model, image, output_path, keep_edges=False):
+def get_mesh(model, image, output_path=None, keep_edges=False):
     '''
     imgae : PIL.Image, must be 'RGB' not 'RGBA'
     '''
@@ -80,8 +80,8 @@ def get_mesh(model, image, output_path, keep_edges=False):
     mesh.vertices = o3d.utility.Vector3dVector(verts)
     mesh.triangles = o3d.utility.Vector3iVector(triangles)
     mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
-    o3d.io.write_triangle_mesh(output_path, mesh)
-    return mesh
+    #o3d.io.write_triangle_mesh(output_path, mesh)
+    return depth, pts3d, mesh
 
 # def create_demo(model):
 
