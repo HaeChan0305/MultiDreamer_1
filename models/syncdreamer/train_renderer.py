@@ -1,10 +1,3 @@
-"""
-python3 train_renderer.py -i output/piano.png \
-                         -n piano \
-                         -b configs/neus.yaml \
-                         -l output/renderer
-"""
-
 import argparse
 import imageio
 import numpy as np

@@ -72,7 +72,7 @@ def inference(image,level=1,*args, **kwargs):
     
     return bbox_results
 
-input_image = Image.open("/root/MultiDreamer/data/input/eval/" + args.input).convert("RGB")
+input_image = Image.open("/root/MultiDreamer/data/input/" + args.input).convert("RGB")
 
 draw = ImageDraw.Draw(input_image)
 output_folder_name = args.input.split('.')[0]

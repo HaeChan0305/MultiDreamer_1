@@ -1,19 +1,40 @@
+"""
+  Example/
+    conda activate eval
+    python eval.py --dir "../data/eval" --input 23 --filename "eval"
 
+  Option/
+    --dir 
+      : (Require, str) The path of the folder where target .ply file exists
+    --input 
+      : (Required, int) In the "dir", 3 files should be exist, 
+        {input}_ground_truth.ply / the ground truth mesh
+        {input}__result_merged_mesh.ply / the result of MutiDreamer
+        {input}_mesh.ply / the result of SyncDreamer(baseline)
+    --filename 
+      : (Optional, str) If you want to record your result to csv file, provide the file name without ".csv"
+        If the file exist in the same folder, it will add new line. If not, it will create a new file.
 """
-  conda activate eval
-"""
+
+import argparse
 import torch
 from pytorch3d.loss import chamfer_distance
 import open3d as o3d
 import numpy as np
-from utils import alert
 import mesh2sdf
 
-SDF_GRID = 64
+from utils import add_csv
+
+SDF_GRID = 128
 
 def load_point_cloud(file_path):
   """
-    load .ply file as point cloud, return points
+    Brief description of the function.
+
+    Detailed description and explanation of parameters.
+
+    :file_path: Description of arg1.
+    :return: Description of the return value.
   """
   ply = o3d.io.read_point_cloud(file_path)
   points = np.asarray(ply.points)
@@ -53,7 +74,6 @@ def cal_chamf_dist(path_1, path_2):
   """
     calculate a chamfer distance between to meshes
   """
-  alert("load point cloud")
   # Load point clouds from .ply files and convert to tensor
   points1 = torch.tensor(load_point_cloud(path_1), dtype=torch.float32)
   points2 = torch.tensor(load_point_cloud(path_2), dtype=torch.float32)
@@ -62,16 +82,14 @@ def cal_chamf_dist(path_1, path_2):
   points1 = points1.view(1, -1, 3)
   points2 = points2.view(1, -1, 3)
 
-  alert("start sampling")
   # Randomly sample points if the point clouds have different numbers of points
-  if points1.shape[1] == points2.shape[1]:
+  if points1.shape[1] != points2.shape[1]:
       max_points = max(points1.shape[1], points2.shape[1])
       
       # Ensure both point clouds have the same number of points (max_points)
       points1 = random_sampling(points1.view(-1, 3), max_points).view(1, -1, 3)
       points2 = random_sampling(points2.view(-1, 3), max_points).view(1, -1, 3)
 
-  alert("calculate chamfer_distance")
   # Compute chamfer distance
   dist_chamfer, _ = chamfer_distance(points1, points2)
 
@@ -82,10 +100,9 @@ def cal_chamf_dist(path_1, path_2):
 
 def cal_vol_iou(path_1, path_2):
   """
-    calculate a volumne IoU between to meshes
+    calculate a volumne IoU, fscore between to meshes
   """
   # Compute the volume of each mesh
-  alert("calculate mesh volume")
   # Load triangle meshes
   mesh1 = o3d.io.read_triangle_mesh(path_1)
   mesh2 = o3d.io.read_triangle_mesh(path_2)
@@ -109,14 +126,36 @@ def cal_vol_iou(path_1, path_2):
   union = np.sum(vol_gt | vol_pr)
   iou = intersection / union
 
-  return iou
+  precision = intersection / np.sum(vol_gt)
+  recall = intersection / np.sum(vol_pr)
+  fscore = 2 * (precision * recall) / (precision + recall)
 
-def main():
-  path_1 = '../data/haechan_test/rotated_chair.ply'
-  path_2 = '../data/haechan_test/rotated_chair.ply'
+  return iou, fscore
 
-  print("chamfer distance : ", cal_chamf_dist(path_1, path_2))
-  print("volume IoU : ", cal_vol_iou(path_1, path_2))
+def main(arg):
+  # gt
+  path_1 = arg.dir + f'/{arg.input}_ground_truth.ply'
+  # our
+  path_2 = arg.dir + f'/{arg.input}_result_merged_mesh.ply'
+  # base
+  path_3 = arg.dir + f'/{arg.input}_mesh.ply'
+
+  cham = cal_chamf_dist(path_1, path_2)
+  iou, fscore = cal_vol_iou(path_1, path_2)
+  cham_base = cal_chamf_dist(path_1, path_3)
+  iou_base, fscore_base = cal_vol_iou(path_1, path_3)
+
+  print(f"{arg.input} result => cham [{cham} < {cham_base}] / iou [{iou} > {iou_base}] / f [{fscore} > {fscore_base}]")
+
+  # record at csv file
+  if arg.filename != None :
+    add_csv(arg.filename, [arg.input, cham, cham_base, iou, iou_base, fscore, fscore_base])
 
 if __name__=="__main__":
-  main()
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--input", required=True, type=int)
+  parser.add_argument("--dir", required=True, type=str)
+  parser.add_argument("--filename", type=str)
+
+  arg = parser.parse_args()
+  main(arg)

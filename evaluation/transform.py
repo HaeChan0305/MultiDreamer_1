@@ -9,79 +9,9 @@ import argparse
 
 
 #############
-# Rotation
-#   - SyncDreamer output Mesh를 적절히 rotate 시켜서 Depth_to_Mesh와 view direction이 맞도록 설정.
-#############
-
-def rotate(mesh, axis, degree):
-    '''
-    Arguments:
-        - axis : List
-        - degree : Int
-    
-    Return:
-        - Mesh
-    '''
-    axis = np.array(axis)
-    axis = axis / np.linalg.norm(axis)
-    angle = np.radians(degree)
-    
-    rotation_matrix = o3d.geometry.get_rotation_matrix_from_axis_angle(np.multiply(axis, angle))
-    return mesh.rotate(rotation_matrix)
-
-def rotation_alignment(mesh):
-    '''
-    x -90도, y 90도, x -30도
-    '''
-    mesh = rotate(mesh, [1, 0, 0], -90)
-    mesh = rotate(mesh, [0, 1, 0], 90)
-    mesh = rotate(mesh, [1, 0, 0], -30)
-    return mesh
-
-#############
-# Masking
-#   - depth_to_points를 object 별 mask로 잘라내야됨.
-#############
-def masking(mask, depth_to_points):
-    '''
-    Arguments :
-        - mask : np.array(H, W)
-        - depth_to_points : np.array(H, W, 3)
-        
-    Return :
-        masked_points : np.array(M, 3)
-    '''
-    H, W = mask.shape
-    H_, W_, _= depth_to_points.shape #WARNING
-    assert(H == H_ and W == W_)
-    
-    return depth_to_points[np.where(mask==255)]
-    
-
-#############
 # Sampling Strategy
 #   - vertex norm이 view direction과 90도 이상 차이나는 vertex 제외
 #############
-def vertex_normal_sampling(points, M):
-    '''
-    Arguments :
-        - points : np.array(N, 3)
-        - M : depth_to_points 의 points 수
-        
-    Return :
-        - sampled_points : np.array(N', 3)
-    '''
-    assert points.shape[0] > M
-    
-    view_direction = np.array([0, 0, -1]) #depth_to_points의 default view direction
-    projection = points @ view_direction
-    sampled_points = points[np.where(projection > 0)]
-    
-    print("\t\t\t>>> vertex_normal_sampling : ", points.shape[0], "->", sampled_points.shape[0])
-    assert sampled_points.shape[0] > M
-    return sampled_points
-    
-    
 def uniform_sampling(points, M):
     assert points.shape[0] > M
     
@@ -107,11 +37,9 @@ def random_sampling(points, M):
     return sampled_points
 
 
-def sampling(mesh, masked_depth_to_points):
-    mesh_points = np.array(mesh.vertices)
-    M, _ = masked_depth_to_points.shape
-    
-    sampled_points = vertex_normal_sampling(mesh_points, M)
+def sampling(gt_mesh, cp_mesh):
+    gt_points = np.array(gt_mesh.vertices)
+    cp_points = np.array(cp_mesh.vertices)
     
     # 원래 코드
     # sampled_points = uniform_sampling(sampled_points, M)
@@ -123,18 +51,18 @@ def sampling(mesh, masked_depth_to_points):
     #     sampled_points = random_sampling(masked_depth_to_points, N)
     
     # 연산량 감소하기 위한 코드
-    sampled_points = uniform_sampling(sampled_points, 10000)
-    sampled_depth_to_points = uniform_sampling(masked_depth_to_points, 10000)
-    N = sampled_points.shape[0]
-    M = sampled_depth_to_points.shape[0]
+    sampled_gt_points = uniform_sampling(gt_points, 10000)
+    sampled_cp_points = uniform_sampling(cp_points, 10000)
+    N = sampled_gt_points.shape[0]
+    M = sampled_cp_points.shape[0]
     
     if N > M:
-        sampled_points = random_sampling(sampled_points, M)
+        sampled_gt_points = random_sampling(sampled_gt_points, M)
     elif N < M:
-        sampled_depth_to_points = random_sampling(sampled_depth_to_points, N)
+        sampled_cp_points = random_sampling(sampled_cp_points, N)
     
-    assert sampled_points.shape[0] == sampled_depth_to_points.shape[0]
-    return sampled_points, sampled_depth_to_points
+    assert sampled_gt_points.shape[0] == sampled_cp_points.shape[0]
+    return sampled_gt_points, sampled_cp_points
     
 
 #############
@@ -206,71 +134,52 @@ def applying(mesh, optimized_params):
     mesh.translate((tx, ty, tz))
     
     return mesh
-    
 
-def process_per_object(mask, mesh, depth_to_points):
-    # Rotation
-    print("\t\t>>> Rotation ...")
-    rotated_mesh = rotation_alignment(mesh)
-    
-    # Masking
-    print("\t\t>>> Masking ...")
-    masked_points = masking(mask, depth_to_points)
-    
+def process_per_object(gt_mesh, mesh):
     # Sampling
     print("\t\t>>> Sampling ...")
-    sampled_points, sampled_masked_points = sampling(rotated_mesh, masked_points)
+    sampled_gt_points, sampled_mesh_points = sampling(gt_mesh, mesh)
     
     # Optimizing
     print("\t\t>>> Optimizing ...")
-    optimized_params = optimizing(sampled_points, sampled_masked_points)
+    optimized_params = optimizing(sampled_gt_points, sampled_mesh_points)
     
     # Applying
     print("\t\t>>> Applying ...")
-    result_mesh = applying(rotated_mesh, optimized_params)
+    result_mesh = applying(mesh, optimized_params)
     
     return result_mesh
-    
+
 
 def process(sample):
-    DIR = f"../../data/output/{sample}/"
+    DIR = f"../../data/eval/"
     
     # input으로 받을 수 있게 변경할 것.
-    mask0_path = DIR + "mask0.jpg"
-    mask1_path = DIR + "mask1.jpg"
-    mesh0_path = DIR + "mesh0.ply"
-    mesh1_path = DIR + "mesh1.ply"
-    depth_to_points_path = DIR + "depth.npy"
-    #depth_to_points_path = f"../../data/haechan_test/{sample}_pts3d.npy"
+    ground_truth_path = DIR + f"{sample}_ground_truth.ply"
+    mesh_path = DIR + f"{sample}_mesh.ply"
+    result_merged_mesh_path = DIR + f"{sample}_result_merged_mesh.ply"
 
     # Load data
     print("\t>>> Loading data ...")
-    mask0 = np.array(Image.open(mask0_path))
-    mask1 = np.array(Image.open(mask1_path))
-    mesh0 = o3d.io.read_triangle_mesh(mesh0_path)
-    mesh1 = o3d.io.read_triangle_mesh(mesh1_path)
-    depth_to_points = np.load(depth_to_points_path)
+    ground_truth = o3d.io.read_triangle_mesh(ground_truth_path)
+    mesh = o3d.io.read_triangle_mesh(mesh_path)
+    result_merged_mesh = o3d.io.read_triangle_mesh(result_merged_mesh_path)
 
     # Process
     print("\t>>> Object 0 ...")
-    result_mesh0 = process_per_object(mask0, mesh0, depth_to_points)
+    trans_mesh = process_per_object(ground_truth, mesh)
     print("\t>>> Object 1 ...")
-    result_mesh1 = process_per_object(mask1, mesh1, depth_to_points)
-    merged_mesh = result_mesh0 + result_mesh1
+    trans_result_merged_mesh = process_per_object(ground_truth, result_merged_mesh)
     
     # Exporting
     print("\t>>> Exporting ...")
-    o3d.io.write_triangle_mesh(DIR + "result_mesh0.ply", result_mesh0)
-    o3d.io.write_triangle_mesh(DIR + "result_mesh1.ply", result_mesh1)
-    o3d.io.write_triangle_mesh(DIR + "result_merged_mesh.ply", merged_mesh)
+    o3d.io.write_triangle_mesh(DIR + f"{sample}_trans_mesh.ply", trans_mesh)
+    o3d.io.write_triangle_mesh(DIR + f"{sample}_trans_result_merged_mesh.ply", trans_result_merged_mesh)
     
     
 def main(args):
     samples = args.samples
-    #os.environ["CUDA_VISIBLE_DEVICES"]=str(args.cuda)
-    
     print(samples)
-    #print("cuda :", cp.cuda.device.id)
     
     for sample in samples:
         print(f">>> Start sample {sample}")
@@ -284,9 +193,7 @@ def main(args):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--samples", nargs='+')
-#parser.add_argument("--cuda", default=0)
 args = parser.parse_args()
 
 main(args)
 
-#CUDA_VISIBLE_DEVICES=n python main.py --samples 59

@@ -47,7 +47,7 @@ def main():
 
     # image and mask_image should be PIL images.
     # The mask structure is white for inpainting and black for keeping as is
-    image = Image.open("/root/MultiDreamer/data/input/eval/" + args.input).convert("RGB")
+    image = Image.open("/root/MultiDreamer/data/input/" + args.input).convert("RGB")
     
     bbox_list = eval(args.bbox)
 
