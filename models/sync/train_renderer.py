@@ -116,26 +116,20 @@ def extract_mesh(model, output, resolution=512):
     mesh = trimesh.Trimesh(vertices, triangles, vertex_colors=vertex_colors)
     mesh.export(output)
 
-def render_mesh(name, index, ground_truth=False, gpu=1):
-    gpus = str(gpu) + ","
-    """
-    python3 train_renderer.py -i output/piano.png \
-                            -n piano \
-                            -b configs/neus.yaml \
-                            -l output/renderer
-    """
-    if ground_truth == True :
-        input_path = "../../data/output/" + name + "/sync_output.png" 
-        output_path = "../../data/output/" + name + "/mesh"
-        output_path_mesh = "../../data/output/" + name + "/mesh.ply"
+def render_mesh(arg):
+    # default settings
+    gpus = str(arg.gpu) + ","
+
+    if arg.baseline == True :
+        input_path = arg.outdir + f"/{arg.input}/sync_output.png" 
+        output_path = arg.outdir + f"/{arg.input}/mesh"
+        output_path_mesh = arg.outdir + f"/{arg.input}/mesh.ply"
     else :
-        input_path = "../../data/output/" + name + "/sync_output" + index + ".png"
-        output_path = "../../data/output/" + name + "/mesh" + index
-        output_path_mesh = "../../data/output/" + name + "/mesh" + index + ".ply"
+        input_path = arg.outdir + f"/{arg.input}/sync_output{arg.index}.png" 
+        output_path = arg.outdir + f"/{arg.input}/mesh{arg.index}"
+        output_path_mesh = arg.outdir + f"/{arg.input}/mesh{arg.index}.ply"
 
-
-
-    # configs
+    # setting training
     cfg = OmegaConf.load("configs/neus.yaml")
     log_dir, ckpt_dir = Path(output_path), Path(output_path) / 'ckpt'
     cfg.model.params['image_path'] = input_path
@@ -179,11 +173,4 @@ def render_mesh(name, index, ground_truth=False, gpu=1):
 
     model = model.cuda().eval()
 
-    # extract mesh file in the directory "data/output/{name}/mesh{index}.ply"
     extract_mesh(model, output_path_mesh)
-
-    # if needed remove all logs
-    # os.removedirs(output_path)
-
-# if __name__=="__main__":
-#     main()

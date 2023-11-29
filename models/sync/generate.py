@@ -1,19 +1,32 @@
-"""
-    // ground_truth 돌릴 때 --ground_truth 옵션 넣기
-    // mesh 까지 만들고 싶을 때 --mesh 옵션 넣기
-    // gpu 지정하고 싶을 때 --gpu {gpu_num} 옵션 넣기, default는 1
-
-    >> ground_truth 돌리고 싶을 때
-    python generate.py --input 31 --index 0 --gpu 0 --ground_truth --mesh
-
-    >> inpainting 결과 돌리고 싶을 때, index는 inpainting결과 index
-    python3 generate.py --input 59 --gpu 0 --index 0 --mesh
 
 """
+  Example/
+    conda activate multidreamer_2
+    python generate.py --indir "../../data/input" --outidr "../../data/output"
+                        --input 21 --index 0
+                        --mesh --gpu 1
 
+  Option/
+    --indir 
+      : (Require, str) The path of the folder where input image exist
+    --input 
+      : (Required, int) The input image number, filename of the image should be {input}.png
+    --outdir 
+      : (Require, str) The path where the result will be store,
+        save depth to points value as .npy file in the subdirectory, {input}/depth.npy
+
+    --index 
+      : (Optional, int) The index of an object using as a input image, {outdir}/{input}/inpainting{index}.png
+    --mesh 
+      : (Optional) Generate .ply mesh based on SyncDreamer output by training NeuS
+    --baseline 
+      : (Optional) If you want to run a baseline method
+    --gpu 
+      : (Optional, int) If you want to specify gpu number, using default setting when no option
+"""
+
+import os
 import argparse
-from pathlib import Path
-import time
 
 import numpy as np
 import torch
@@ -34,42 +47,43 @@ def load_model(cfg,ckpt,strict=True):
     model = model.cuda().eval()
     return model
 
-def generate(name, index, ground_truth=False, mesh=False, gpu=1):
+def generate(arg):
+    # default settings
     cfg = 'configs/syncdreamer.yaml'
     ckpt = 'ckpt/syncdreamer-pretrain.ckpt'
     seed = 6033
 
-    if ground_truth == True :
-        input_path = "../../data/input/" + name + ".png"
-        image_path = "../../data/input/sync_input" + name + ".png"
-        output_path = "../../data/output/" + name + "/sync_output.png" 
+    # path settings
+    if not os.path.exists(arg.outdir + f"/{input}"):
+        os.makedirs(arg.outdir + f"/{input}")
+
+    if arg.baseline == True :
+        input_path = arg.indir + f"/{arg.input}.png"
+        image_path = arg.indir + f"/sync_input{arg.input}.png"
+        output_path = arg.outdir + f"/{arg.input}/sync_output.png"
     else :
-        input_path = "../../data/output/" + name + "/inpainting" + index + ".png"
-        image_path = "../../data/output/" + name + "/sync_input" + index + ".png"
-        output_path = "../../data/output/" + name + "/sync_output" + index + ".png"
+        input_path = arg.outdir + f"/{arg.input}/inpainting{arg.index}.png"
+        image_path = arg.outdir + f"/{arg.input}/sync_input{arg.index}.png"
+        output_path = arg.outdir + f"/{arg.input}/sync_output{arg.index}.png"
     
-    print(input_path, image_path, output_path)
+    # [1] remove background of input image (optional)
     process(input_path, image_path)
 
     torch.random.manual_seed(seed)
     np.random.seed(seed)
 
-    torch.cuda.set_device(gpu)
+    # [2] prepare model and data
     model = load_model(cfg, ckpt, strict=True)
     assert isinstance(model, SyncMultiviewDiffusion)
-    # Path(f'{output_path}').mkdir(exist_ok=True, parents=True)
 
-    print("-"*10, "start prediction", "-"*10)
-
-    # prepare data
     data = prepare_inputs(image_path, 30, 200)
     for k, v in data.items():
         data[k] = v.unsqueeze(0).cuda()
         data[k] = torch.repeat_interleave(data[k], 1, dim=0)
 
-
     sampler = SyncDDIMSampler(model, 50)
 
+    # [3] predict multi view images
     x_sample = model.sample(sampler, data, 2.0, 8)
 
     B, N, _, H, W = x_sample.shape
@@ -77,22 +91,29 @@ def generate(name, index, ground_truth=False, mesh=False, gpu=1):
     x_sample = x_sample.permute(0,1,3,4,2).cpu().numpy() * 255
     x_sample = x_sample.astype(np.uint8)
 
+    # [4] store output as png file
     for bi in range(B):
         imsave(output_path, np.concatenate([x_sample[bi,ni] for ni in range(N)], 1))
 
-    if mesh:
-        render_mesh(name, index, ground_truth, gpu)
+    # [5] generate mesh by training NeuS
+    if arg.mesh:
+        render_mesh(arg)
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', required=True, type=int)
+    parser.add_argument("--indir", required=True, type=str)
+    parser.add_argument("--outdir", required=True, type=str)
+
     parser.add_argument('--index', default=0, type=int)
     parser.add_argument('--mesh', action='store_true')
-    parser.add_argument('--ground_truth', action='store_true')
+    parser.add_argument('--baseline', action='store_true')
     parser.add_argument('--gpu', type=int)
 
-    opt = parser.parse_args()
-    print(" >> Run SyncDreamer with GPU ", opt.gpu)
+    arg = parser.parse_args()
 
-    generate(str(opt.input), str(opt.index), opt.ground_truth, opt.mesh, opt.gpu)
+    if arg.gpu != None :
+        torch.cuda.set_device(arg.gpu)
+
+    generate(arg)
 
