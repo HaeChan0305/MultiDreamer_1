@@ -13,8 +13,8 @@ source activate sam
 
 cd SAM
 
-for ((i=61; i<=68; i++)); do
-# for i in "${input_img[@]}"; do
+# for ((i=61; i<=68; i++)); do
+for i in "${input_img[@]}"; do
     INPUT_IMAGE="${i}.png"
     BBOX=$(python inference_auto_generation.py --level 2 --input "${INPUT_IMAGE}")
     
