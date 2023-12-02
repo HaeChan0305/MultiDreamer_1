@@ -40,7 +40,7 @@ def main(arg):
     model.eval()
 
     # [2] prepare img
-    img = Image.open(arg.indir + f"/{input}.png")
+    img = Image.open(arg.indir + f"/{arg.input}.png")
     X = ToTensor()(img)
 
     if X.shape[0] == 4 : # if RGBA image transform to RGB format
@@ -54,10 +54,10 @@ def main(arg):
 
     # [3-2] depth_to_points
     pts3d = depth_to_points(out[0].numpy(), R=None, t=None)
-    output_path = arg.outdir + f"/{input}/depth.npy"
+    output_path = arg.outdir + f"/{arg.input}/depth.npy"
 
-    if not os.path.exists(arg.outdir + f"/{input}"):
-        os.makedirs(arg.outdir + f"/{input}")
+    if not os.path.exists(arg.outdir + f"/{arg.input}"):
+        os.makedirs(arg.outdir + f"/{arg.input}")
     np.save(output_path, pts3d)
 
 if __name__=="__main__":
